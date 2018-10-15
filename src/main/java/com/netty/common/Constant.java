@@ -18,7 +18,7 @@ public class Constant {
 	public static final String OP_CODE_Config  		  = "10031";//修改配置
 	
 	public static final String qiniuDomain 			  = "http://p81hvnvrf.bkt.clouddn.com/";
-	public static final String apiServer   			  = "http://localhost:80";
+	public static final String apiServer   			  = "http://localhost:8081";
 	
 	public static final int BIGEN_PLAY=1;    //播放返回得状态
 	public static final int PAUSE_PLAY=2;

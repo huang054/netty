@@ -30,10 +30,16 @@ import com.netty.model.AudioModel;
 import com.netty.model.DeviceModel;
 import com.netty.model.PlayMessage;
 import com.netty.model.PlayTime;
+import com.netty.model.RecentAlbumModel;
+import com.netty.model.RecentAudioModel;
 import com.netty.model.ReportStatusModel;
 import com.netty.service.AudioService;
 import com.netty.service.DeviceService;
+import com.netty.service.RecentAlbumService;
+import com.netty.service.RecentAudioService;
+import com.netty.service.RedisDiscussService;
 import com.netty.service.ReportStatusService;
+import com.netty.service.UserService;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -47,47 +53,9 @@ public class DeviceInboundHandler extends ChannelInboundHandlerAdapter {
 	/*
 	 * @Autowired private Producer producer;
 	 */
+	 @Autowired
+     private RedisDiscussService redis;
 
-	public static void main(String[] a) {
-
-		// StdRespDTO<CmdDTO> msg = new StdRespDTO<CmdDTO>(Constant.OP_CODE_BIND);
-		// CmdDTO deviceInfo = new CmdDTO();
-		// deviceInfo.setDeviceId("D");
-		// deviceInfo.setUserId("1");
-		// msg.setData(deviceInfo);
-		// System.out.println(JSON.toJSONString(msg));
-
-		StdRespDTO<DeviceModel> bindDTO = new StdRespDTO<DeviceModel>(Constant.OP_CODE_LOGIN);
-		bindDTO.setOpConn("0");
-		DeviceModel deviceModel = new DeviceModel();
-		bindDTO.setData(deviceModel);
-		deviceModel.setPreUserId("A01");
-		deviceModel.setUserId("18929567567");
-		deviceModel.setDeviceId("deviceId");
-		deviceModel.setDeviceName("reset");
-
-		System.out.println(JSON.toJSONString(bindDTO));
-		//
-
-		// DeviceKey dk = new DeviceKey("CCC","DDD");
-		// deviceModel.setId(dk);
-		// deviceModel.setDeviceName("ZKGX");
-		// deviceModel.setBaiduId("baidu0001");
-		// deviceModel.setVersion(0.5f);
-
-		// StdRespDTO<ReportStatusModel> reportDTO = new
-		// StdRespDTO<ReportStatusModel>(Constant.OP_CODE_STATUS);
-		// ReportStatusModel reportStatusModel = new ReportStatusModel();
-		// reportDTO.setOpConn("0");
-		// reportStatusModel.setAudioId(1L);
-		// reportStatusModel.setAlbumId(2L);
-		// reportStatusModel.setAudioPlayTime(10);
-		// reportStatusModel.setAudioStatus(3);
-		// reportStatusModel.setDeviceId("D");
-		// reportStatusModel.setUserId("AAA");
-		// reportDTO.setData(reportStatusModel);
-		// System.out.println(JSON.toJSONString(reportDTO));
-	}
 
 	@Override
 	public void channelRead(ChannelHandlerContext ctx, Object msg) {
@@ -163,6 +131,7 @@ public class DeviceInboundHandler extends ChannelInboundHandlerAdapter {
 			deviceModel = JSON.toJavaObject(data, DeviceModel.class);
 			System.out.println("login  deviceId" + deviceModel.getDeviceId());
 			System.out.println("login  channel" + ctx.channel());
+			RedisDiscussService.getInstance().save(deviceModel.getDeviceId(), deviceModel.getDeviceId());
 			ConcurrentHashMapCache.getInstance().put(deviceModel.getDeviceId(), ctx.channel());
 			String bindUserId = ConcurrentHashMapCache.getInstance().getDeviceIdUserIdBindingCache()
 					.get(deviceModel.getDeviceId());
@@ -179,7 +148,7 @@ public class DeviceInboundHandler extends ChannelInboundHandlerAdapter {
 			}
 			System.out.println("bindUserId" + bindUserId);
 			System.out.println("userId" + deviceModel.getUserId());
-			if (!bindUserId.equals(deviceModel.getUserId())) {
+			if (!deviceModel.getUserId().equals(bindUserId)) {
 				respDTO = new StdRespDTO<ServerRespDataDTO>(false);
 				respDTO.setMsg("device is not bind with the user .");
 				ReturnUtils.writeAndFlush(respDTO, ctx.channel());
@@ -203,13 +172,25 @@ public class DeviceInboundHandler extends ChannelInboundHandlerAdapter {
 			 * context.getBean(Producer.class);
 			 */
 
+			if(reportStatusModel.getAudioStatus() == Constant.BIGEN_PLAY) {
+				RecentAlbumModel album = new RecentAlbumModel();
+				album.setTicket("");
+				album.setAlbumId(reportStatusModel.getAlbumId());
+				album.setUserId(DeviceService.getInstance().findByDeviceId(reportStatusModel.getDeviceId()).getUserId());
+				RecentAudioModel audio = new RecentAudioModel();
+				audio.setTicket("");
+				audio.setAudioId(reportStatusModel.getAudioId());
+				audio.setUserId(DeviceService.getInstance().findByDeviceId(reportStatusModel.getDeviceId()).getUserId());
+				RecentAudioService.getInstance().save(audio);
+				RecentAlbumService.getInstance().save(album);
+			}
 			if (reportStatusModel.getAudioStatus() == Constant.PAUSE_PLAY
 					|| reportStatusModel.getAudioStatus() == Constant.END_PLAY) {// 播放歌曲
 
 				PlayTime p = new PlayTime();
 				p.setAudioId(reportStatusModel.getAudioId().toString());
 				p.setTime(reportStatusModel.getAudioPlayTime().toString());
-				p.setUserId(reportStatusModel.getUserId());
+				p.setUserId(reportStatusModel.getDeviceId());
 
 				String jsonstring = JSON.toJSONString(p);
 				Producer.getInstance().sendPlayTime(jsonstring);
@@ -221,14 +202,14 @@ public class DeviceInboundHandler extends ChannelInboundHandlerAdapter {
 				PlayTime p = new PlayTime();
 				p.setAudioId(reportStatusModel.getAudioId().toString());
 				p.setTime(reportStatusModel.getAudioPlayTime().toString());
-				p.setUserId(reportStatusModel.getUserId());
+				p.setUserId(reportStatusModel.getDeviceId());
 
 				String jsonstring = JSON.toJSONString(p);
 				Producer.getInstance().sendPlay(jsonstring);
 				// System.out.println("MQ成功");
 
 			}
-			ReportStatusService.getInstance().save(reportStatusModel);
+			//ReportStatusService.getInstance().save(reportStatusModel);
 			dvcRespData.setDeviceId(reportStatusModel.getDeviceId());
 			dvcRespData.setUserId(reportStatusModel.getUserId());
 			respDTO.setData(dvcRespData);
@@ -237,7 +218,7 @@ public class DeviceInboundHandler extends ChannelInboundHandlerAdapter {
 			JSONObject jo = new JSONObject();
 			jo.put("report", reportStatusModel);
 			jo.put("audioModel", audioModel);
-			AJpushUtils.pushIOSMsg(reportStatusModel.getUserId(), "data", jo.toJSONString());
+			AJpushUtils.pushIOSMsg(UserService.getInstance().findById(Long.parseLong(DeviceService.getInstance().findByDeviceId(reportStatusModel.getDeviceId()).getUserId())).getPhoneNum(), "data", jo.toJSONString());
 			break;
 
 		case Constant.OP_CODE_PLAY_M:

@@ -20,7 +20,7 @@ public class AudioDTO {
     
     private Long createTime;
     
-	public Long getAudioId() {
+	public Long getId() {
 		return id;
 	}
 

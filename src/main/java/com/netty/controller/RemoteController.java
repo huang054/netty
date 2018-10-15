@@ -30,6 +30,7 @@ import com.netty.dto.StdRespDTO;
 import com.netty.model.DeviceModel;
 import com.netty.model.ReportStatusModel;
 import com.netty.service.DeviceService;
+import com.netty.service.RedisDiscussService;
 import com.netty.service.ReportStatusService;
 
 
@@ -44,6 +45,8 @@ public class RemoteController {
 	
 	@Autowired
 	private ReportStatusService reportStatusService;
+	@Autowired
+	private RedisDiscussService redis;
 
 	
 //	
@@ -121,7 +124,12 @@ public class RemoteController {
 		logger.info("deviceIds:"+deviceIds.toString());
 		Map<String,OnlineStatusDTO> map = new HashMap<String,OnlineStatusDTO>();
 		for( String deviceId :deviceIds ) {
-			Channel ch  = ConcurrentHashMapCache.getInstance().get(deviceId);
+			//Channel ch  = ConcurrentHashMapCache.getInstance().get(deviceId);
+			String key=redis.get(deviceId);
+			Channel ch=null;
+			if(null!=key) {
+			ch  = ConcurrentHashMapCache.getInstance().get(deviceId);
+			}
 			OnlineStatusDTO onlineStatusDTO = new OnlineStatusDTO();
 			Boolean isOnline =( ch!=null && ch.isActive() == true);
 			onlineStatusDTO.setOnline(isOnline);
@@ -154,6 +162,12 @@ public class RemoteController {
 	
 	@PostMapping(path="/play/{userId}/{deviceId}/{opCode}/{index_}")
 	public String play(@RequestBody Iterable<AudioDTO > audioList,@PathVariable("userId") String userId,@PathVariable("deviceId") String deviceId,@PathVariable("opCode") String opCode,@PathVariable("index_") int index_) {
+		String key=redis.get(deviceId);
+		if(null==key) {
+			 ConcurrentHashMapCache.getInstance().remove(deviceId);
+			return "设备:"+deviceId+"不在线";
+			
+		}
 		Channel channel = ConcurrentHashMapCache.getInstance().get(deviceId);
 		if(channel == null || channel.isActive() ==false ) {
 			return "设备:"+deviceId+"不在线";
